@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
+
 	defer database.Close()
 
 	log.Println("Connected to database successfully")
@@ -55,25 +57,40 @@ func main() {
 		Handler: router,
 	}
 
+	var (
+		parentCtx, cancel = context.WithCancel(context.Background())
+		notifyCtx, stop   = signal.NotifyContext(parentCtx, syscall.SIGINT, syscall.SIGTERM)
+	)
+
 	// Start the server in a goroutine
 	go func() {
 		log.Printf("Server starting on %s\n", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v\n", err)
+			log.Printf("Failed to start server: %v\n", err)
+
+			cancel()
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shut down the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	<-notifyCtx.Done()
+
+	stop()
+
+	if errors.Is(context.Canceled, parentCtx.Err()) {
+		return // graceful shutdown for db.Close()
+	}
+
+	cancel()
+
 	log.Println("Shutting down server...")
 
 	// Create a deadline for server shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v\n", err)
+	ctxDeadline, cancelDeadline := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelDeadline()
+	if err := srv.Shutdown(ctxDeadline); err != nil {
+		log.Printf("Server forced to shutdown: %v\n", err)
+
+		return // graceful shutdown for db.Close()
 	}
 
 	log.Println("Server exited properly")

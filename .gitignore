@@ -160,7 +160,6 @@ target/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
-*.iws
 *.iml
 *.ipr
 
@@ -191,4 +190,6 @@ build/
 
 
 tmp/
+puml/
+diagrams/
 task-*
