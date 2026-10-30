@@ -1,0 +1,7 @@
+site_name: FitLifeDocumentation
+theme: readthedocs
+markdown_extensions:
+  - md_in_html
+  - plantuml_markdown
+plugins:
+  - search
